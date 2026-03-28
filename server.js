@@ -279,6 +279,17 @@ app.patch('/api/products/:id', requireAdmin, upload.single('image'), async (req,
   }
 });
 
+// DELETE product (Admin Only)
+app.delete('/api/products/:id', requireAdmin, async (req, res) => {
+  try {
+    const deleted = await Product.findByIdAndDelete(req.params.id);
+    if (!deleted) return res.status(404).json({ error: 'Product not found' });
+    res.json({ message: 'Product deleted' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete product' });
+  }
+});
+
 // POST create an order (User/Admin)
 app.post('/api/orders', requireAuth, async (req, res) => {
   try {
