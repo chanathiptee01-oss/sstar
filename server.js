@@ -321,21 +321,31 @@ app.get('/api/orders', requireAuth, async (req, res) => {
   }
 });
 
-// PATCH update order status (Admin)
-app.patch('/api/orders/:id/status', requireAdmin, async (req, res) => {
+// PATCH update order status (Admin or Owner)
+app.patch('/api/orders/:id/status', requireAuth, async (req, res) => {
   const { status } = req.body;
-  if (typeof status !== 'number' || status < 0 || status > 6) {
+  const statusInt = status is int ? status : int.tryParse(status?.toString() ?? '');
+  if (statusInt == null || statusInt < 0 || statusInt > 6) {
     return res.status(400).json({ error: 'Invalid status' });
   }
   try {
     const order = await Order.findById(req.params.id);
     if (!order) return res.status(404).json({ error: 'Order not found' });
-    if (order.status !== status) {
-      order.status = status;
+
+    const isAdmin = req.user?.role == 'admin';
+    const isOwner = order.userId == req.userId;
+    if (!isAdmin) {
+      if (!isOwner) return res.status(403).json({ error: 'Forbidden' });
+      if (statusInt != 4) return res.status(403).json({ error: 'User can only cancel order' });
+    }
+
+    if (order.status !== statusInt) {
+      order.status = statusInt;
       order.statusHistory = order.statusHistory || [];
       order.statusHistory.push({
-        status,
+        status: statusInt,
         changedBy: req.userId || '',
+        changedAt: new Date(),
       });
       await order.save();
     }
