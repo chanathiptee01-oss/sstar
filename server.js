@@ -21,6 +21,7 @@ if (!MONGO_URI) {
 // --- Schemas & Models ---
 const userSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true },
+  name: { type: String, default: '' },
   password: { type: String, required: true }, // Should be hashed in prod
   role: { type: String, default: 'user', enum: ['user', 'admin'] }
 });
@@ -43,6 +44,13 @@ const orderSchema = new mongoose.Schema({
   quantity: { type: Number, default: 1 },
   totalAmount: { type: Number, required: true },
   status: { type: Number, default: 0 }, // 0-6
+  statusHistory: [
+    {
+      status: { type: Number, required: true },
+      changedAt: { type: Date, default: Date.now },
+      changedBy: { type: String, default: '' },
+    },
+  ],
   createdAt: { type: Date, default: Date.now }
 });
 const Order = mongoose.model('Order', orderSchema);
@@ -67,7 +75,7 @@ app.get('/api/products', async (req, res) => {
 
 // POST register user
 app.post('/api/auth/register', async (req, res) => {
-  const { username, password } = req.body;
+  const { username, password, name } = req.body;
   
   if (!username || !password) {
     return res.status(400).json({ error: 'Username and password required' });
@@ -84,7 +92,7 @@ app.post('/api/auth/register', async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    const newUser = new User({ username, password: hashedPassword, role });
+    const newUser = new User({ username, name: name || '', password: hashedPassword, role });
     await newUser.save();
 
     res.status(201).json({ message: 'User registered successfully', role });
@@ -127,6 +135,24 @@ app.get('/api/auth/user/:id', async (req, res) => {
     res.json(user);
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch user' });
+  }
+});
+
+// PATCH /auth/user/:id - Update user profile (self or admin)
+app.patch('/api/auth/user/:id', requireAuth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin' && req.userId !== req.params.id) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    const updates = {};
+    if (typeof req.body.name === 'string') {
+      updates.name = req.body.name.trim();
+    }
+    const user = await User.findByIdAndUpdate(req.params.id, updates, { new: true, select: '-password' });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    res.json(user);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update user' });
   }
 });
 
@@ -183,7 +209,13 @@ app.post('/api/orders', requireAuth, async (req, res) => {
     const newOrder = new Order({
       ...req.body,
       userId: req.userId,
-      status: typeof req.body.status === 'number' ? req.body.status : 0,
+      status: 0,
+      statusHistory: [
+        {
+          status: 0,
+          changedBy: req.userId,
+        },
+      ],
     });
     await newOrder.save();
     res.status(201).json({ message: 'Order placed successfully', order: newOrder });
@@ -215,12 +247,17 @@ app.patch('/api/orders/:id/status', requireAdmin, async (req, res) => {
     return res.status(400).json({ error: 'Invalid status' });
   }
   try {
-    const order = await Order.findByIdAndUpdate(
-      req.params.id,
-      { status },
-      { new: true }
-    );
+    const order = await Order.findById(req.params.id);
     if (!order) return res.status(404).json({ error: 'Order not found' });
+    if (order.status !== status) {
+      order.status = status;
+      order.statusHistory = order.statusHistory || [];
+      order.statusHistory.push({
+        status,
+        changedBy: req.userId || '',
+      });
+      await order.save();
+    }
     res.json(order);
   } catch (err) {
     res.status(500).json({ error: 'Failed to update order status' });
