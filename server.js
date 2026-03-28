@@ -324,7 +324,7 @@ app.get('/api/orders', requireAuth, async (req, res) => {
 // PATCH update order status (Admin or Owner)
 app.patch('/api/orders/:id/status', requireAuth, async (req, res) => {
   const { status } = req.body;
-  const statusInt = status is int ? status : int.tryParse(status?.toString() ?? '');
+  const statusInt = typeof status === 'number' ? status : parseInt(status ?? '', 10);
   if (statusInt == null || statusInt < 0 || statusInt > 6) {
     return res.status(400).json({ error: 'Invalid status' });
   }
