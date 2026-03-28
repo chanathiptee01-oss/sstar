@@ -242,6 +242,31 @@ app.post('/api/products', requireAdmin, upload.single('image'), async (req, res)
   }
 });
 
+// PATCH update a product (Admin)
+app.patch('/api/products/:id', requireAdmin, upload.single('image'), async (req, res) => {
+  try {
+    const updates = {};
+    if (typeof req.body.title === 'string') updates.title = req.body.title.trim();
+    if (req.body.price !== undefined) {
+      const price = Number.parseFloat(req.body.price);
+      if (!Number.isNaN(price)) updates.price = price;
+    }
+    if (typeof req.body.description === 'string') updates.description = req.body.description.trim();
+    if (typeof req.body.category === 'string') updates.category = req.body.category.trim();
+    if (req.file) {
+      updates.image = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
+    }
+    if (Object.keys(updates).length == 0) {
+      return res.status(400).json({ error: 'No fields to update' });
+    }
+    const updated = await Product.findByIdAndUpdate(req.params.id, updates, { new: true });
+    if (!updated) return res.status(404).json({ error: 'Product not found' });
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update product' });
+  }
+});
+
 // POST create an order (User/Admin)
 app.post('/api/orders', requireAuth, async (req, res) => {
   try {
