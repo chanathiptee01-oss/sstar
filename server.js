@@ -3,6 +3,9 @@ const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -11,6 +14,24 @@ const MONGO_URI = process.env.MONGO_URI;
 // Middleware
 app.use(cors());
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Static uploads
+const uploadDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir);
+}
+app.use('/uploads', express.static(uploadDir));
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadDir),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname || '');
+    const name = `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
+    cb(null, name);
+  },
+});
+const upload = multer({ storage });
 
 // MongoDB Connection
 if (!MONGO_URI) {
@@ -28,11 +49,11 @@ const userSchema = new mongoose.Schema({
 const User = mongoose.model('User', userSchema);
 
 const productSchema = new mongoose.Schema({
-  title: String,
-  price: Number,
-  description: String,
-  category: String,
-  image: String
+  title: { type: String, required: true, trim: true },
+  price: { type: Number, required: true, min: 0 },
+  description: { type: String, default: '' },
+  category: { type: String, default: '' },
+  image: { type: String, default: '' }
 });
 const Product = mongoose.model('Product', productSchema);
 
@@ -193,9 +214,23 @@ app.patch('/api/auth/user/:id', requireAuth, async (req, res) => {
 });
 
 // POST add a new product (Admin)
-app.post('/api/products', requireAdmin, async (req, res) => {
+app.post('/api/products', requireAdmin, upload.single('image'), async (req, res) => {
   try {
-    const newProduct = new Product(req.body);
+    const title = typeof req.body.title === 'string' ? req.body.title.trim() : '';
+    const price = Number.parseFloat(req.body.price);
+    if (!title || Number.isNaN(price)) {
+      return res.status(400).json({ error: 'Title and price are required' });
+    }
+    const imageUrl = req.file
+      ? `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`
+      : (req.body.imageUrl || '');
+    const newProduct = new Product({
+      title,
+      price,
+      description: req.body.description || '',
+      category: req.body.category || '',
+      image: imageUrl,
+    });
     await newProduct.save();
     res.status(201).json(newProduct);
   } catch (err) {
