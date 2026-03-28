@@ -86,7 +86,10 @@ app.get('/', (req, res) => {
 // GET all products
 app.get('/api/products', async (req, res) => {
   try {
-    const products = await Product.find({});
+    const products = await Product.find({
+      title: { $exists: true, $ne: '' },
+      price: { $ne: null },
+    });
 
     res.json(products);
   } catch (err) {
@@ -217,18 +220,19 @@ app.patch('/api/auth/user/:id', requireAuth, async (req, res) => {
 app.post('/api/products', requireAdmin, upload.single('image'), async (req, res) => {
   try {
     const title = typeof req.body.title === 'string' ? req.body.title.trim() : '';
-    const price = Number.parseFloat(req.body.price);
+    const priceRaw = typeof req.body.price === 'string' ? req.body.price.trim() : req.body.price;
+    const price = Number.parseFloat(priceRaw);
     if (!title || Number.isNaN(price)) {
       return res.status(400).json({ error: 'Title and price are required' });
     }
     const imageUrl = req.file
       ? `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`
-      : (req.body.imageUrl || '');
+      : (typeof req.body.imageUrl === 'string' ? req.body.imageUrl : '');
     const newProduct = new Product({
       title,
       price,
-      description: req.body.description || '',
-      category: req.body.category || '',
+      description: typeof req.body.description === 'string' ? req.body.description.trim() : '',
+      category: typeof req.body.category === 'string' ? req.body.category.trim() : '',
       image: imageUrl,
     });
     await newProduct.save();
