@@ -1,0 +1,37 @@
+{
+  "users": [],
+  "products": [
+    {
+      "id": 1,
+      "title": "SStar Premium T-Shirt",
+      "price": 29.99,
+      "description": "High quality cotton t-shirt with SStar logo.",
+      "category": "clothing",
+      "image": "https://fakestoreapi.com/img/71-3HjGNDUL._AC_SY879._SX._UX._SY._UY_.jpg"
+    },
+    {
+      "id": 2,
+      "title": "SStar Leather Jacket",
+      "price": 129.99,
+      "description": "Premium leather jacket for a sleek modern look.",
+      "category": "clothing",
+      "image": "https://fakestoreapi.com/img/81XH0e8fefL._AC_UY879_.jpg"
+    },
+    {
+      "id": 3,
+      "title": "SStar Gold Watch",
+      "price": 299.99,
+      "description": "Elegant luxury watch with precise movement.",
+      "category": "accessories",
+      "image": "https://fakestoreapi.com/img/71pWzhdJNwL._AC_UL640_QL65_ML3_.jpg"
+    },
+    {
+      "id": 4,
+      "title": "SStar Modern Backpack",
+      "price": 59.99,
+      "description": "Spacious and comfortable backpack for everyday use.",
+      "category": "accessories",
+      "image": "https://fakestoreapi.com/img/81fPKd-2AYL._AC_SL1500_.jpg"
+    }
+  ]
+}
