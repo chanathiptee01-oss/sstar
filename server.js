@@ -38,9 +38,11 @@ const Product = mongoose.model('Product', productSchema);
 const orderSchema = new mongoose.Schema({
   userId: { type: String, required: true },
   customerName: { type: String, required: true },
+  shippingAddress: { type: String, default: '' },
   productDetails: { type: Object, required: true },
+  quantity: { type: Number, default: 1 },
   totalAmount: { type: Number, required: true },
-  status: { type: String, default: 'Pending' },
+  status: { type: Number, default: 0 }, // 0-6
   createdAt: { type: Date, default: Date.now }
 });
 const Order = mongoose.model('Order', orderSchema);
@@ -181,6 +183,7 @@ app.post('/api/orders', requireAuth, async (req, res) => {
     const newOrder = new Order({
       ...req.body,
       userId: req.userId,
+      status: typeof req.body.status === 'number' ? req.body.status : 0,
     });
     await newOrder.save();
     res.status(201).json({ message: 'Order placed successfully', order: newOrder });
@@ -202,6 +205,25 @@ app.get('/api/orders', requireAuth, async (req, res) => {
     res.json(orders);
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch orders' });
+  }
+});
+
+// PATCH update order status (Admin)
+app.patch('/api/orders/:id/status', requireAdmin, async (req, res) => {
+  const { status } = req.body;
+  if (typeof status !== 'number' || status < 0 || status > 6) {
+    return res.status(400).json({ error: 'Invalid status' });
+  }
+  try {
+    const order = await Order.findByIdAndUpdate(
+      req.params.id,
+      { status },
+      { new: true }
+    );
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+    res.json(order);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update order status' });
   }
 });
 
