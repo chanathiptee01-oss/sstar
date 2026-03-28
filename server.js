@@ -59,9 +59,11 @@ const Product = mongoose.model('Product', productSchema);
 
 const orderSchema = new mongoose.Schema({
   userId: { type: String, required: true },
+  orderCode: { type: String, default: '' },
   customerName: { type: String, required: true },
+  companyName: { type: String, default: '' },
   shippingAddress: { type: String, default: '' },
-  productDetails: { type: Object, required: true },
+  productDetails: { type: mongoose.Schema.Types.Mixed, required: true },
   quantity: { type: Number, default: 1 },
   totalAmount: { type: Number, required: true },
   status: { type: Number, default: 0 }, // 0-6
@@ -270,8 +272,13 @@ app.patch('/api/products/:id', requireAdmin, upload.single('image'), async (req,
 // POST create an order (User/Admin)
 app.post('/api/orders', requireAuth, async (req, res) => {
   try {
+    const orderCode =
+      typeof req.body.orderCode === 'string' && req.body.orderCode.trim()
+        ? req.body.orderCode.trim()
+        : `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
     const newOrder = new Order({
       ...req.body,
+      orderCode,
       userId: req.userId,
       status: 0,
       statusHistory: [
