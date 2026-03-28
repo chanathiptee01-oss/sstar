@@ -62,6 +62,8 @@ const orderSchema = new mongoose.Schema({
   orderCode: { type: String, default: '' },
   customerName: { type: String, required: true },
   companyName: { type: String, default: '' },
+  houseNumber: { type: String, default: '' },
+  addressDetail: { type: String, default: '' },
   shippingAddress: { type: String, default: '' },
   productDetails: { type: mongoose.Schema.Types.Mixed, required: true },
   quantity: { type: Number, default: 1 },
@@ -318,6 +320,49 @@ app.get('/api/orders', requireAuth, async (req, res) => {
     res.json(orders);
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch orders' });
+  }
+});
+
+// PATCH update order details (Admin or Owner)
+app.patch('/api/orders/:id', requireAuth, async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id);
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+    const isOwner = order.userId == req.userId;
+    if (!isOwner && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Not allowed to edit this order' });
+    }
+
+    const updates = {};
+    if (typeof req.body.customerName === 'string') updates.customerName = req.body.customerName.trim();
+    if (typeof req.body.companyName === 'string') updates.companyName = req.body.companyName.trim();
+    if (typeof req.body.houseNumber === 'string') updates.houseNumber = req.body.houseNumber.trim();
+    if (typeof req.body.addressDetail === 'string') updates.addressDetail = req.body.addressDetail.trim();
+    if (typeof req.body.shippingAddress === 'string') updates.shippingAddress = req.body.shippingAddress.trim();
+    if (Array.isArray(req.body.productDetails)) updates.productDetails = req.body.productDetails;
+
+    if (req.body.quantity != null) {
+      const qty = typeof req.body.quantity === 'number'
+        ? req.body.quantity
+        : parseInt(req.body.quantity, 10);
+      if (!Number.isNaN(qty)) updates.quantity = qty;
+    }
+    if (req.body.totalAmount != null) {
+      const total = typeof req.body.totalAmount === 'number'
+        ? req.body.totalAmount
+        : parseFloat(req.body.totalAmount);
+      if (!Number.isNaN(total)) updates.totalAmount = total;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ error: 'No fields to update' });
+    }
+
+    Object.assign(order, updates);
+    await order.save();
+    res.json({ message: 'Order updated', order });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update order' });
   }
 });
 
