@@ -127,35 +127,6 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-// GET /auth/me - Get current user profile based on user_id 
-app.get('/api/auth/user/:id', async (req, res) => {
-  try {
-    const user = await User.findById(req.params.id, '-password');
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    res.json(user);
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch user' });
-  }
-});
-
-// PATCH /auth/user/:id - Update user profile (self or admin)
-app.patch('/api/auth/user/:id', requireAuth, async (req, res) => {
-  try {
-    if (req.user.role !== 'admin' && req.userId !== req.params.id) {
-      return res.status(403).json({ error: 'Forbidden' });
-    }
-    const updates = {};
-    if (typeof req.body.name === 'string') {
-      updates.name = req.body.name.trim();
-    }
-    const user = await User.findByIdAndUpdate(req.params.id, updates, { new: true, select: '-password' });
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    res.json(user);
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to update user' });
-  }
-});
-
 const getUserIdFromToken = (authHeader) => {
   if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
   const token = authHeader.split(' ')[1];
@@ -191,6 +162,35 @@ const requireAdmin = async (req, res, next) => {
     return res.status(500).json({ error: 'Authorization failed' });
   }
 };
+
+// GET /auth/me - Get current user profile based on user_id 
+app.get('/api/auth/user/:id', async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id, '-password');
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    res.json(user);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch user' });
+  }
+});
+
+// PATCH /auth/user/:id - Update user profile (self or admin)
+app.patch('/api/auth/user/:id', requireAuth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin' && req.userId !== req.params.id) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    const updates = {};
+    if (typeof req.body.name === 'string') {
+      updates.name = req.body.name.trim();
+    }
+    const user = await User.findByIdAndUpdate(req.params.id, updates, { new: true, select: '-password' });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    res.json(user);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update user' });
+  }
+});
 
 // POST add a new product (Admin)
 app.post('/api/products', requireAdmin, async (req, res) => {
