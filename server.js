@@ -210,7 +210,11 @@ app.patch('/api/auth/user/:id', requireAuth, async (req, res) => {
     if (typeof req.body.name === 'string') {
       updates.name = req.body.name.trim();
     }
-    const user = await User.findByIdAndUpdate(req.params.id, updates, { new: true, select: '-password' });
+    const user = await User.findByIdAndUpdate(
+      req.params.id,
+      updates,
+      { returnDocument: 'after', select: '-password' }
+    );
     if (!user) return res.status(404).json({ error: 'User not found' });
     res.json(user);
   } catch (err) {
@@ -261,7 +265,11 @@ app.patch('/api/products/:id', requireAdmin, upload.single('image'), async (req,
     if (Object.keys(updates).length == 0) {
       return res.status(400).json({ error: 'No fields to update' });
     }
-    const updated = await Product.findByIdAndUpdate(req.params.id, updates, { new: true });
+    const updated = await Product.findByIdAndUpdate(
+      req.params.id,
+      updates,
+      { returnDocument: 'after' }
+    );
     if (!updated) return res.status(404).json({ error: 'Product not found' });
     res.json(updated);
   } catch (err) {
@@ -272,13 +280,15 @@ app.patch('/api/products/:id', requireAdmin, upload.single('image'), async (req,
 // POST create an order (User/Admin)
 app.post('/api/orders', requireAuth, async (req, res) => {
   try {
-    const orderCode =
-      typeof req.body.orderCode === 'string' && req.body.orderCode.trim()
-        ? req.body.orderCode.trim()
-        : `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const now = new Date();
+    const dateStr =
+      `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+    const count = await Order.countDocuments({ orderCode: new RegExp(`^ORD-${dateStr}-`) });
+    const orderCode = `ORD-${dateStr}-${String(count + 1).padStart(6, '0')}`;
     const newOrder = new Order({
       ...req.body,
       orderCode,
+      customerName: req.user?.name?.trim() || req.user?.username || '',
       userId: req.userId,
       status: 0,
       statusHistory: [
