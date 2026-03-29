@@ -6,7 +6,6 @@ const bcrypt = require('bcryptjs');
 const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
-const admin = require('firebase-admin');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -33,24 +32,6 @@ const storage = multer.diskStorage({
   },
 });
 const upload = multer({ storage });
-
-// Firebase Admin (FCM)
-let firebaseReady = false;
-try {
-  const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
-  if (serviceAccountPath && fs.existsSync(serviceAccountPath)) {
-    const raw = fs.readFileSync(serviceAccountPath, 'utf8');
-    const serviceAccount = JSON.parse(raw);
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount),
-    });
-    firebaseReady = true;
-  } else {
-    console.warn('⚠️  FIREBASE_SERVICE_ACCOUNT_PATH not set or file not found; push disabled.');
-  }
-} catch (err) {
-  console.warn('⚠️  Failed to init Firebase Admin; push disabled.', err.message);
-}
 
 // MongoDB Connection
 if (!MONGO_URI) {
@@ -112,51 +93,6 @@ const notificationSchema = new mongoose.Schema({
 });
 const Notification = mongoose.model('Notification', notificationSchema);
 
-const deviceTokenSchema = new mongoose.Schema({
-  userId: { type: String, required: true },
-  role: { type: String, default: 'user', enum: ['user', 'admin'] },
-  token: { type: String, required: true, unique: true },
-  platform: { type: String, default: '' },
-  updatedAt: { type: Date, default: Date.now },
-});
-const DeviceToken = mongoose.model('DeviceToken', deviceTokenSchema);
-
-const statusTextTh = {
-  0: 'รอยืนยันการสั่งซื้อ',
-  1: 'ยืนยันการสั่งซื้อแล้ว',
-  2: 'กำลังจัดส่งแล้ว',
-  3: 'ส่งสำเร็จแล้ว',
-  4: 'ยกเลิกแล้ว',
-  5: 'ไม่ผ่านการยืนยันแล้ว',
-  6: 'ส่งไม่สำเร็จแล้ว',
-};
-
-const buildStatusPhraseTh = (status) => statusTextTh[status] || 'อัปเดตสถานะแล้ว';
-
-const sendPushToTokens = async (tokens, payload) => {
-  if (!firebaseReady || !tokens || tokens.length === 0) return;
-  try {
-    await admin.messaging().sendEachForMulticast({
-      tokens,
-      notification: payload.notification,
-      data: payload.data || {},
-    });
-  } catch (err) {
-    console.warn('⚠️  Failed to send push:', err.message);
-  }
-};
-
-const sendPushToRole = async (role, payload) => {
-  const rows = await DeviceToken.find({ role }).select('token');
-  const tokens = rows.map((r) => r.token).filter(Boolean);
-  await sendPushToTokens(tokens, payload);
-};
-
-const sendPushToUser = async (userId, payload) => {
-  const rows = await DeviceToken.find({ userId }).select('token');
-  const tokens = rows.map((r) => r.token).filter(Boolean);
-  await sendPushToTokens(tokens, payload);
-};
 
 // --- Endpoints ---
 
@@ -398,18 +334,6 @@ app.post('/api/orders', requireAuth, async (req, res) => {
       companyName: newOrder.companyName || '',
       status: newOrder.status ?? 0,
     });
-    await sendPushToRole('admin', {
-      notification: {
-        title: 'คำสั่งซื้อใหม่',
-        body: `เลขที่การสั่งซื้อ: ${newOrder.orderCode || '-'}\n${newOrder.companyName || '-'}`,
-      },
-      data: {
-        type: 'order_created',
-        orderId: newOrder._id.toString(),
-        orderCode: newOrder.orderCode || '',
-        status: String(newOrder.status ?? 0),
-      },
-    });
     res.status(201).json({ message: 'Order placed successfully', order: newOrder });
   } catch (err) {
     res.status(500).json({ error: 'Failed to place order' });
@@ -447,31 +371,6 @@ app.get('/api/notifications', requireAuth, async (req, res) => {
     res.json(notifications);
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch notifications' });
-  }
-});
-
-// POST register device token for push
-app.post('/api/push/token', requireAuth, async (req, res) => {
-  try {
-    const token = (req.body.token || '').toString().trim();
-    const platform = (req.body.platform || '').toString().trim();
-    if (!token) return res.status(400).json({ error: 'Token required' });
-
-    await DeviceToken.findOneAndUpdate(
-      { token },
-      {
-        token,
-        userId: req.userId,
-        role: req.user.role || 'user',
-        platform,
-        updatedAt: new Date(),
-      },
-      { upsert: true, new: true }
-    );
-
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to register token' });
   }
 });
 
@@ -555,19 +454,6 @@ app.patch('/api/orders/:id/status', requireAuth, async (req, res) => {
           orderCode: order.orderCode || '',
           companyName: order.companyName || '',
           status: statusInt,
-        });
-        const statusText = buildStatusPhraseTh(statusInt);
-        await sendPushToUser(order.userId, {
-          notification: {
-            title: `เลขที่การสั่งซื้อ: ${order.orderCode || '-'}`,
-            body: `${order.companyName || '-'}\n${statusText}`,
-          },
-          data: {
-            type: 'status_changed',
-            orderId: order._id.toString(),
-            orderCode: order.orderCode || '',
-            status: String(statusInt),
-          },
         });
       }
     }
