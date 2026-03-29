@@ -82,11 +82,13 @@ const orderSchema = new mongoose.Schema({
 const Order = mongoose.model('Order', orderSchema);
 
 const notificationSchema = new mongoose.Schema({
-  userId: { type: String, required: true },
+  userId: { type: String, default: '' }, // user-only notifications
+  recipientRole: { type: String, default: 'user', enum: ['user', 'admin'] },
+  type: { type: String, default: 'status_changed', enum: ['status_changed', 'order_created'] },
   orderId: { type: String, required: true },
   orderCode: { type: String, default: '' },
   companyName: { type: String, default: '' },
-  status: { type: Number, required: true },
+  status: { type: Number, default: 0 },
   createdAt: { type: Date, default: Date.now },
 });
 const Notification = mongoose.model('Notification', notificationSchema);
@@ -323,6 +325,14 @@ app.post('/api/orders', requireAuth, async (req, res) => {
       ],
     });
     await newOrder.save();
+    await Notification.create({
+      recipientRole: 'admin',
+      type: 'order_created',
+      orderId: newOrder._id.toString(),
+      orderCode: newOrder.orderCode || '',
+      companyName: newOrder.companyName || '',
+      status: newOrder.status ?? 0,
+    });
     res.status(201).json({ message: 'Order placed successfully', order: newOrder });
   } catch (err) {
     res.status(500).json({ error: 'Failed to place order' });
@@ -350,9 +360,11 @@ app.get('/api/notifications', requireAuth, async (req, res) => {
   try {
     let query = {};
     if (req.user.role === 'admin') {
-      query = req.query.userId ? { userId: req.query.userId } : {};
+      query = req.query.userId
+        ? { recipientRole: 'user', userId: req.query.userId }
+        : { recipientRole: 'admin' };
     } else {
-      query = { userId: req.userId };
+      query = { recipientRole: 'user', userId: req.userId, type: 'status_changed' };
     }
     const notifications = await Notification.find(query).sort({ createdAt: -1 }).limit(100);
     res.json(notifications);
@@ -434,6 +446,8 @@ app.patch('/api/orders/:id/status', requireAuth, async (req, res) => {
       await order.save();
       if (isAdmin) {
         await Notification.create({
+          recipientRole: 'user',
+          type: 'status_changed',
           userId: order.userId,
           orderId: order._id.toString(),
           orderCode: order.orderCode || '',
