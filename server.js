@@ -62,6 +62,7 @@ const orderSchema = new mongoose.Schema({
   orderCode: { type: String, default: '' },
   customerName: { type: String, required: true },
   companyName: { type: String, default: '' },
+  phone: { type: String, default: '' },
   houseNumber: { type: String, default: '' },
   addressDetail: { type: String, default: '' },
   shippingAddress: { type: String, default: '' },
@@ -79,6 +80,16 @@ const orderSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 const Order = mongoose.model('Order', orderSchema);
+
+const notificationSchema = new mongoose.Schema({
+  userId: { type: String, required: true },
+  orderId: { type: String, required: true },
+  orderCode: { type: String, default: '' },
+  companyName: { type: String, default: '' },
+  status: { type: Number, required: true },
+  createdAt: { type: Date, default: Date.now },
+});
+const Notification = mongoose.model('Notification', notificationSchema);
 
 // --- Endpoints ---
 
@@ -334,6 +345,22 @@ app.get('/api/orders', requireAuth, async (req, res) => {
   }
 });
 
+// GET notifications (User gets own, Admin can pass ?userId)
+app.get('/api/notifications', requireAuth, async (req, res) => {
+  try {
+    let query = {};
+    if (req.user.role === 'admin') {
+      query = req.query.userId ? { userId: req.query.userId } : {};
+    } else {
+      query = { userId: req.userId };
+    }
+    const notifications = await Notification.find(query).sort({ createdAt: -1 }).limit(100);
+    res.json(notifications);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch notifications' });
+  }
+});
+
 // PATCH update order details (Admin or Owner)
 app.patch('/api/orders/:id', requireAuth, async (req, res) => {
   try {
@@ -347,6 +374,7 @@ app.patch('/api/orders/:id', requireAuth, async (req, res) => {
     const updates = {};
     if (typeof req.body.customerName === 'string') updates.customerName = req.body.customerName.trim();
     if (typeof req.body.companyName === 'string') updates.companyName = req.body.companyName.trim();
+    if (typeof req.body.phone === 'string') updates.phone = req.body.phone.trim();
     if (typeof req.body.houseNumber === 'string') updates.houseNumber = req.body.houseNumber.trim();
     if (typeof req.body.addressDetail === 'string') updates.addressDetail = req.body.addressDetail.trim();
     if (typeof req.body.shippingAddress === 'string') updates.shippingAddress = req.body.shippingAddress.trim();
@@ -404,6 +432,15 @@ app.patch('/api/orders/:id/status', requireAuth, async (req, res) => {
         changedAt: new Date(),
       });
       await order.save();
+      if (isAdmin) {
+        await Notification.create({
+          userId: order.userId,
+          orderId: order._id.toString(),
+          orderCode: order.orderCode || '',
+          companyName: order.companyName || '',
+          status: statusInt,
+        });
+      }
     }
     res.json(order);
   } catch (err) {
